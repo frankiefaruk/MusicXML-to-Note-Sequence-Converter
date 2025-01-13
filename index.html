@@ -1,0 +1,225 @@
+<html><head><base href="." />
+  <title>MusicXML to Note Sequence Converter</title>
+  <style>
+    body {
+      font-family: monospace;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #1e1e1e;
+      color: #d4d4d4;
+    }
+    
+    .container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    
+    textarea, pre {
+      width: 100%;
+      height: 400px;
+      font-family: monospace;
+      padding: 10px;
+      border: 1px solid #444;
+      border-radius: 4px;
+      background: #2d2d2d;
+      color: #d4d4d4;
+      margin: 0;
+      box-sizing: border-box;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    pre {
+      overflow: auto;
+      white-space: pre;
+      word-wrap: normal;
+    }
+    
+    button {
+      padding: 12px 24px;
+      background: #ff8c42;
+      color: #333333;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 20px 0;
+      font-family: monospace;
+      font-size: 14px;
+      transition: background 0.2s ease;
+    }
+    
+    button:hover {
+      background: #ff6f00;
+    }
+
+    .button-container {
+      display: flex;
+      gap: 10px;
+    }
+
+    h1 {
+      font-size: 24px;
+      margin-bottom: 30px;
+      color: #d4d4d4;
+      font-weight: normal;
+    }
+
+    h3 {
+      font-size: 16px;
+      margin-bottom: 10px;
+      color: #d4d4d4;
+      font-weight: normal;
+    }
+
+    .file-upload {
+      position: relative;
+      overflow: hidden;
+      display: inline-block;
+    }
+
+    .file-upload input[type="file"] {
+      font-size: 100px;
+      position: absolute;
+      left: 0;
+      top: 0;
+      opacity: 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>MusicXML to Note Sequence Converter</h1>
+  
+  <div class="container">
+    <div>
+      <h3>Input MusicXML:</h3>
+      <textarea id="inputXML"></textarea>
+    </div>
+    <div>
+      <h3>Output Note Sequence:</h3>
+      <pre id="outputSequence"></pre>
+    </div>
+  </div>
+  
+  <div class="button-container">
+    <button class="file-upload">
+      Load MusicXML
+      <input type="file" id="fileInput" accept=".xml" onchange="handleFileUpload(event)" />
+    </button>
+    <button onclick="convertToNoteSequence()">Convert</button>
+    <button onclick="copyOutput()">Copy Output</button>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/fast-xml-parser/4.2.5/fxparser.min.js"></script>
+  
+  <script>
+    // Sample MusicXML for testing
+    const sampleMusicXML = `
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.1 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1">
+      <part-name>Piano</part-name>
+    </score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>4</duration>
+        <type>quarter</type>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>4</duration>
+        <type>quarter</type>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+
+    document.getElementById('inputXML').value = sampleMusicXML;
+
+    function noteToMidi(step, octave, alter = 0) {
+      const noteValues = {
+        'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11
+      };
+      return noteValues[step] + (octave + 1) * 12 + alter;
+    }
+
+    function convertToNoteSequence() {
+      const parser = new window.XMLParser();
+      const inputXML = document.getElementById('inputXML').value;
+      
+      try {
+        const musicXML = parser.parse(inputXML);
+        
+        const notes = [];
+        let position = 0;
+        
+        const part = musicXML['score-partwise'].part;
+        const measures = Array.isArray(part.measure) ? part.measure : [part.measure];
+        
+        measures.forEach(measure => {
+          const measureNotes = Array.isArray(measure.note) ? measure.note : [measure.note];
+          
+          measureNotes.forEach(note => {
+            if (!note.pitch) return;
+            
+            const pitch = note.pitch;
+            const duration = parseInt(note.duration);
+            const midiNote = noteToMidi(pitch.step, parseInt(pitch.octave));
+            
+            notes.push({
+              position,
+              note: midiNote,
+              velocity: 0.8,
+              length: duration
+            });
+            
+            position += duration;
+          });
+        });
+        
+        const fileName = document.getElementById('fileInput').files[0]?.name?.replace('.xml', '') || 'Converted Sequence';
+        const outputSequence = `<?xml version="1.0" encoding="UTF-8"?>
+<sequence name="${fileName}" length="${notes.length}" rate="4">
+${notes.map(note => `  <note position="${note.position}" velocity="${note.velocity}" note="${note.note}" length="${note.length}"/>`).join('\n')}
+</sequence>`;
+        
+        document.getElementById('outputSequence').textContent = outputSequence;
+        
+      } catch (error) {
+        console.error('Error converting MusicXML:', error);
+        document.getElementById('outputSequence').textContent = 'Error converting MusicXML: ' + error.message;
+      }
+    }
+
+    function copyOutput() {
+      const output = document.getElementById('outputSequence');
+      navigator.clipboard.writeText(output.textContent)
+        .then(() => alert('Output copied to clipboard!'))
+        .catch(() => alert('Failed to copy output'));
+    }
+
+    function handleFileUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const text = e.target.result;
+        document.getElementById('inputXML').value = text;
+      };
+      reader.readAsText(file);
+    }
+  </script>
+</body></html>
